@@ -13,6 +13,15 @@ class Appointment(models.Model):
         through="AppointmentRecipient",
         related_name="appointments_as_recipient",
     )
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    status = models.CharField(
+        max_length=30,
+        choices=get_setting("APPOINTMENTS_STATUS_CHOICES"),
+        default="pending",
+        blank=True,
+    )
 
 
 class AppointmentProvider(models.Model):
