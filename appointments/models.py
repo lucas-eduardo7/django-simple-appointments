@@ -22,6 +22,8 @@ class Appointment(models.Model):
         default="pending",
         blank=True,
     )
+    is_blocked = models.BooleanField(default=False)
+    block_reason = models.TextField(blank=True, null=True)
 
 
 class AppointmentProvider(models.Model):
