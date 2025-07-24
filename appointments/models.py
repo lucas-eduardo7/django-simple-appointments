@@ -1,5 +1,7 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from .conf import get_setting
+from .utils import check_appointments_conflicts
 
 
 class Appointment(models.Model):
@@ -25,12 +27,38 @@ class Appointment(models.Model):
     is_blocked = models.BooleanField(default=False)
     block_reason = models.TextField(blank=True, null=True)
 
+    def clean(self):
+        super().clean()
+
+        if not self.pk:
+            return
+
+        for provider in self.providers.all():
+            conflict_message = check_appointments_conflicts(self, provider)
+            if conflict_message:
+                raise ValidationError(conflict_message)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
 
 class AppointmentProvider(models.Model):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     provider = models.ForeignKey(
         to=get_setting("APPOINTMENTS_PROVIDER_MODEL"), on_delete=models.CASCADE
     )
+
+    def clean(self):
+        super().clean()
+
+        conflict_message = check_appointments_conflicts(self.appointment, self.provider)
+        if conflict_message:
+            raise ValidationError(conflict_message)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class AppointmentRecipient(models.Model):
