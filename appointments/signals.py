@@ -1,21 +1,20 @@
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
-from .models import Appointment
+from .models import Appointment, AppointmentProvider
 
 
-@receiver(m2m_changed, sender=Appointment)
-def check_conflits(sender, instance, action, **kwargs):
-    print("chamado")
-    if action != "post_add":
-        return
-    for provider in instance.providers.all():
-        conflicts = Appointment.objects.filter(
-            providers=provider,
-            date=instance.date,
-            start_time__lt=instance.end_time,
-            end_time__gt=instance.start_time,
-        ).exclude(pk=instance.pk)
+@receiver(post_save, sender=AppointmentProvider)
+def check_conflits(sender, instance, **kwargs):
+    appointment = instance.appointment
+    provider = instance.provider
 
-        if conflicts.exists():
-            raise ValidationError("error")
+    conflicts = Appointment.objects.filter(
+        providers=provider,
+        date=appointment.date,
+        start_time__lt=appointment.end_time,
+        end_time__gt=appointment.start_time,
+    ).exclude(pk=appointment.pk)
+
+    if conflicts.exists():
+        raise ValidationError("Schedule conflict for the provider.")
