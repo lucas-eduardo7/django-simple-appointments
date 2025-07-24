@@ -4,6 +4,7 @@ from django.conf import settings
 DEFAULTS = {
     "APPOINTMENTS_PROVIDER_MODEL": "auth.User",
     "APPOINTMENTS_RECIPIENT_MODEL": "auth.User",
+    "APPOINTMENTS_ACTIVITIES_MODEL": "activities.Activity",
     "APPOINTMENTS_STATUS_CHOICES": [
         ("", "Not specified"),
         ("pending", "Pending"),
