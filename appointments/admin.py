@@ -1,5 +1,15 @@
 from django.contrib import admin
-from .models import Appointment, AppointmentProvider, AppointmentRecipient
+from .models import (
+    Appointment,
+    AppointmentActivities,
+    AppointmentProvider,
+    AppointmentRecipient,
+)
+
+
+class AppointmentActivitiesInline(admin.TabularInline):
+    model = AppointmentActivities
+    extra = 1
 
 
 class AppointmentProviderInline(admin.TabularInline):
@@ -14,4 +24,8 @@ class AppointmentRecipientInline(admin.TabularInline):
 
 @admin.register(Appointment)
 class AppointmentAdmin(admin.ModelAdmin):
-    inlines = [AppointmentProviderInline, AppointmentRecipientInline]
+    inlines = [
+        AppointmentActivitiesInline,
+        AppointmentProviderInline,
+        AppointmentRecipientInline,
+    ]
