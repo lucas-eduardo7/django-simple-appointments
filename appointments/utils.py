@@ -1,13 +1,21 @@
 from django.apps import apps
-from datetime import datetime, timedelta, date
 
 
-def validate_appointments_conflicts(instance, provider):
+def validate_appointments_conflicts(instance, provider, queryset=None):
+    if not instance.prevents_overlap:
+        return None
+
     Appointment = apps.get_model("appointments", "Appointment")
-    conflicts = Appointment.objects.filter(
-        date=instance.date,
-        start_time__lt=instance.end_time,
-        end_time__gt=instance.start_time,
+
+    if queryset is None:
+        queryset = Appointment.objects.filter(
+            prevents_overlap=True,
+            date=instance.date,
+            start_time__lt=instance.end_time,
+            end_time__gt=instance.start_time,
+        )
+
+    conflicts = queryset.filter(
         providers__in=[provider],
     ).exclude(pk=instance.pk)
 
@@ -29,23 +37,10 @@ def validate_time_cohesion(start_time, end_time):
     return None
 
 
-def set_price(instance):
-    if not instance.auto_price:
-        return
-
-    total = sum(a.price for a in instance.activities.all())
-    instance.price = total
-    instance.save(update_fields=["price"])
-
-
-def set_end_time(instance):
-    if not instance.auto_end_time:
-        return
-
-    total_duration = sum(
-        (a.duration_time for a in instance.activities.all()), timedelta()
-    )
-    dummy_datetime = datetime.combine(date.min, instance.start_time)
-    result_datetime = dummy_datetime + total_duration
-    instance.end_time = result_datetime.time()
-    instance.save(update_fields=["end_time"])
+def validate_blocked_cohesion(is_blocked, prevents_overlap):
+    if is_blocked and not prevents_overlap:
+        return (
+            "An appointment cannot be marked as blocked while allowing overlaps. "
+            "Set 'prevents_overlap=True' when 'is_blocked=True'."
+        )
+    return None
