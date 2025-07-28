@@ -1,15 +1,13 @@
-from django.core.exceptions import ValidationError
 from django.db import models
 from .conf import get_setting
-from .utils import (
-    validate_appointments_conflicts,
-    validate_time_cohesion,
-    set_price,
-    set_end_time,
+from .model_mixins import (
+    AppointmentValidateMixin,
+    ProviderValidateMixin,
+    ActivitiesMixin,
 )
 
 
-class Appointment(models.Model):
+class Appointment(models.Model, AppointmentValidateMixin):
     providers = models.ManyToManyField(
         to=get_setting("APPOINTMENTS_PROVIDER_MODEL"),
         through="AppointmentProvider",
@@ -38,32 +36,18 @@ class Appointment(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField(blank=True, null=False)
     auto_end_time = models.BooleanField(default=True)
+    prevents_overlap = models.BooleanField(default=True)
 
     def clean(self):
         super().clean()
-
-        if self.end_time is None:
-            self.end_time = self.start_time
-
-        time_cohesion = validate_time_cohesion(self.start_time, self.end_time)
-        if time_cohesion:
-            raise ValidationError(time_cohesion)
-
-        if not self.pk:
-            return
-
-        for provider in self.providers.all():
-            conflict_message = validate_appointments_conflicts(self, provider)
-
-            if conflict_message:
-                raise ValidationError(conflict_message)
+        self.validate()
 
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
 
 
-class AppointmentProvider(models.Model):
+class AppointmentProvider(models.Model, ProviderValidateMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     provider = models.ForeignKey(
         to=get_setting("APPOINTMENTS_PROVIDER_MODEL"), on_delete=models.CASCADE
@@ -71,12 +55,7 @@ class AppointmentProvider(models.Model):
 
     def clean(self):
         super().clean()
-
-        conflict_message = validate_appointments_conflicts(
-            self.appointment, self.provider
-        )
-        if conflict_message:
-            raise ValidationError(conflict_message)
+        self.validate()
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -90,13 +69,16 @@ class AppointmentRecipient(models.Model):
     )
 
 
-class AppointmentActivities(models.Model):
+class AppointmentActivities(models.Model, ActivitiesMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     activity = models.ForeignKey(
         to=get_setting("APPOINTMENTS_ACTIVITIES_MODEL"), on_delete=models.CASCADE
     )
 
+    def delete(self, *args, **kwargs):
+        self.update_fields()
+        super().delete(*args, **kwargs)
+
     def save(self, *args, **kwargs):
+        self.update_fields()
         super().save(*args, **kwargs)
-        set_price(self.appointment)
-        set_end_time(self.appointment)
