@@ -39,12 +39,30 @@ class Appointment(BaseModel, AppointmentValidateMixin):
     auto_end_time = models.BooleanField(default=True)
     prevents_overlap = models.BooleanField(default=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["date"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["is_blocked"]),
+            models.Index(fields=["date", "start_time"]),
+            models.Index(fields=["date", "end_time"]),
+            models.Index(fields=["date", "start_time", "end_time"]),
+        ]
+
 
 class AppointmentProvider(BaseModel, ProviderValidateMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     provider = models.ForeignKey(
         to=get_setting("APPOINTMENTS_PROVIDER_MODEL"), on_delete=models.CASCADE
     )
+
+    class Meta:
+        indexes = [models.Index(fields=["provider", "appointment"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment", "provider"], name="unique_appointment_provider"
+            )
+        ]
 
 
 class AppointmentRecipient(BaseModel):
@@ -53,9 +71,20 @@ class AppointmentRecipient(BaseModel):
         to=get_setting("APPOINTMENTS_RECIPIENT_MODEL"), on_delete=models.CASCADE
     )
 
+    class Meta:
+        indexes = [models.Index(fields=["recipient", "appointment"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment", "recipient"], name="unique_appointment_recipient"
+            )
+        ]
+
 
 class AppointmentActivity(AppointmentAcitivityBaseModel, ActivityMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     activity = models.ForeignKey(
         to=get_setting("APPOINTMENTS_ACTIVITIES_MODEL"), on_delete=models.CASCADE
     )
+
+    class Meta:
+        indexes = [models.Index(fields=["activity", "appointment"])]
