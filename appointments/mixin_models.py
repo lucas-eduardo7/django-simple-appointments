@@ -9,9 +9,10 @@ from .utils import (
 
 
 class AppointmentValidateMixin:
-    def validate(self):
+    def run_validations(self):
         self._set_null_end_time()
         self._validate_time()
+        self._validate_blocked()
         self._validate_conflicts()
 
     def _get_queryset(self):
@@ -52,7 +53,7 @@ class AppointmentValidateMixin:
 
 
 class ProviderValidateMixin:
-    def validate(self):
+    def run_validations(self):
         self._validate_conflicts()
 
     def _validate_conflicts(self):
@@ -81,7 +82,6 @@ class UpdateAutoFieldsMixin:
 
     def _set_end_time(self):
         instance = self._get_instance()
-        print(instance)
         if not instance.auto_end_time or not instance.pk:
             return
 
@@ -93,7 +93,7 @@ class UpdateAutoFieldsMixin:
         instance.end_time = result_datetime.time()
 
 
-class ActivitiesMixin(UpdateAutoFieldsMixin):
+class ActivityMixin(UpdateAutoFieldsMixin):
     def _get_instance(self):
         return self.appointment
 
