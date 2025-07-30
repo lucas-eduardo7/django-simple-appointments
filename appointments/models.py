@@ -4,7 +4,7 @@ from .abstract_models import BaseModel, AppointmentAcitivityBaseModel
 from .mixin_models import (
     AppointmentValidateMixin,
     ProviderValidateMixin,
-    ActivitiesMixin,
+    ActivityMixin,
 )
 
 
@@ -21,7 +21,7 @@ class Appointment(BaseModel, AppointmentValidateMixin):
     )
     activities = models.ManyToManyField(
         to=get_setting("APPOINTMENTS_ACTIVITIES_MODEL"),
-        through="AppointmentActivities",
+        through="AppointmentActivity",
         related_name="appointments_as_activities",
     )
     status = models.CharField(
@@ -54,7 +54,7 @@ class AppointmentRecipient(BaseModel):
     )
 
 
-class AppointmentActivity(AppointmentAcitivityBaseModel, ActivitiesMixin):
+class AppointmentActivity(AppointmentAcitivityBaseModel, ActivityMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     activity = models.ForeignKey(
         to=get_setting("APPOINTMENTS_ACTIVITIES_MODEL"), on_delete=models.CASCADE

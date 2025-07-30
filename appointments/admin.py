@@ -1,14 +1,14 @@
 from django.contrib import admin
 from .models import (
     Appointment,
-    AppointmentActivities,
+    AppointmentActivity,
     AppointmentProvider,
     AppointmentRecipient,
 )
 
 
 class AppointmentActivitiesInline(admin.TabularInline):
-    model = AppointmentActivities
+    model = AppointmentActivity
     extra = 1
 
 
