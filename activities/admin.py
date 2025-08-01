@@ -4,4 +4,4 @@ from .models import Activity
 
 @admin.register(Activity)
 class ActivityAdmin(admin.ModelAdmin):
-    pass
+    list_display = ("id", "price", "duration_time")
