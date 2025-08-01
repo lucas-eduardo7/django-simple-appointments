@@ -49,6 +49,12 @@ class Appointment(BaseModel, AppointmentValidateMixin):
             models.Index(fields=["date", "start_time", "end_time"]),
         ]
 
+    def __str__(self):
+        providers = ", ".join(p.username for p in self.providers.all()[:2])
+        if self.providers.count() > 2:
+            providers += "..."
+        return f"Appointment on {self.date} from {self.start_time} to {self.end_time} | Providers: {providers or 'N/A'} | Status: {self.status}"
+
 
 class AppointmentProvider(BaseModel, ProviderValidateMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
