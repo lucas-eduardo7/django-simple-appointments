@@ -377,15 +377,16 @@ class AppointmentOverlapVerificationTest(AppointmentTestMixin):
         Ensure that creating an appointment with the exact same start and end time
         as an existing one raises a ValidationError due to schedule conflict.
         """
+        today = date.today()
         with self.assertRaisesMessage(
             ValidationError,
-            "Schedule conflict for provider provider on 2025-07-31 between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:00:00 to 15:00:00.",
+            f"Schedule conflict for provider provider on {today} between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:00:00 to 15:00:00.",
         ):
             appointment = Appointment.objects.create(
                 price=70,
                 start_time="14:00",
                 end_time="15:00",
-                date=date.today(),
+                date=today,
                 auto_price=False,
                 auto_end_time=False,
             )
@@ -401,15 +402,16 @@ class AppointmentOverlapVerificationTest(AppointmentTestMixin):
         Ensure that creating an appointment fully inside the time range of
         another appointment (e.g., 14:30–14:50 inside 14:00–15:00) raises a ValidationError.
         """
+        today = date.today()
         with self.assertRaisesMessage(
             ValidationError,
-            "Schedule conflict for provider provider on 2025-07-31 between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:30:00 to 14:50:00.",
+            f"Schedule conflict for provider provider on {today} between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:30:00 to 14:50:00.",
         ):
             appointment = Appointment.objects.create(
                 price=70,
                 start_time="14:30",
                 end_time="14:50",
-                date=date.today(),
+                date=today,
                 auto_price=False,
                 auto_end_time=False,
             )
@@ -469,7 +471,8 @@ class AppointmentOverlapVerificationTest(AppointmentTestMixin):
         Validate that changing an appointment's date to a day where it overlaps
         with an existing appointment raises a ValidationError.
         """
-        tomorrow = date.today() + timedelta(days=1)
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
         appointment = Appointment.objects.create(
             price=70,
             start_time="14:00",
@@ -489,7 +492,7 @@ class AppointmentOverlapVerificationTest(AppointmentTestMixin):
 
         with self.assertRaisesMessage(
             ValidationError,
-            "Schedule conflict for provider provider on 2025-07-31 between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:00:00 to 15:00:00.",
+            f"Schedule conflict for provider provider on {today} between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:00:00 to 15:00:00.",
         ):
             appointment.date = date.today()
             appointment.save()
@@ -557,15 +560,16 @@ class AppointmentOverlapVerificationTest(AppointmentTestMixin):
         Validate that when one provider is already booked during a time slot,
         creating a new appointment with the same provider raises a ValidationError.
         """
+        today = date.today()
         with self.assertRaisesMessage(
             ValidationError,
-            "Schedule conflict for provider provider on 2025-07-31 between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:00:00 to 15:00:00.",
+            f"Schedule conflict for provider provider on {today} between 14:00:00 and 15:00:00. Conflicts with existing appointment from 14:00:00 to 15:00:00.",
         ):
             appointment = Appointment.objects.create(
                 price=70,
                 start_time="14:00",
                 end_time="15:00",
-                date=date.today(),
+                date=today,
                 auto_price=False,
                 auto_end_time=False,
             )
