@@ -16,8 +16,9 @@ class BaseModel(models.Model):
         if hasattr(self, "run_validations"):
             self.run_validations()
 
-    def save(self, *args, **kwargs):
-        self.full_clean()
+    def save(self, clean=True, *args, **kwargs):
+        if clean:
+            self.full_clean()
         super().save(*args, **kwargs)
 
 
