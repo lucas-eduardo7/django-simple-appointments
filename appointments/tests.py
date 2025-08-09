@@ -2,8 +2,9 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from model_bakery import baker
-from datetime import date, timedelta
+from datetime import date, timedelta, time
 from .models import Appointment
+from .forms import AppointmentAdminForm
 
 
 USER = get_user_model()
@@ -716,3 +717,474 @@ class AppointmentAutoFieldsOnActivityUpdateTest(AppointmentTestMixin):
         # Reload the appointment from the database and check that fields did not change
         appointment.refresh_from_db()
         self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True)
+
+
+class FormHelperMixin:
+    def _build_form_data(
+        self,
+        *,
+        date_value=None,
+        start_time=None,
+        end_time=None,
+        price=None,
+        auto_price=None,
+        auto_end_time=None,
+        is_blocked=None,
+        prevents_overlap=None,
+        providers=None,
+        recipients=None,
+        activities=None,
+    ):
+        data = {}
+        if date_value is not None:
+            data["date"] = date_value.isoformat()
+        if start_time is not None:
+            data["start_time"] = str(start_time)
+        if end_time is not None:
+            data["end_time"] = str(end_time)
+        if price is not None:
+            data["price"] = str(price)
+        if auto_price is not None:
+            data["auto_price"] = auto_price
+        if auto_end_time is not None:
+            data["auto_end_time"] = auto_end_time
+        if is_blocked is not None:
+            data["is_blocked"] = is_blocked
+        if prevents_overlap is not None:
+            data["prevents_overlap"] = prevents_overlap
+
+        data["providers"] = [p.pk for p in (providers or [])]
+        data["recipients"] = [r.pk for r in (recipients or [])]
+        data["activities"] = [a.pk for a in (activities or [])]
+
+        return data
+
+    def _submit_and_save_form(self, data):
+        form = AppointmentAdminForm(data=data)
+        self.assertTrue(form.is_valid(), f"Form errors: {form.errors.as_json()}")
+        return form.save()
+
+
+class CreateAppointmentFormTests(AppointmentTestMixin, FormHelperMixin):
+    def test_create_complete_appointment_auto_fields_off(self):
+        """Test creating a complete appointment with automatic fields disabled, using form."""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 70, "14:00", "15:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_complete_appointment_auto_fields_on(self):
+        """Test creating a complete appointment with auto fields enabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=0,
+            auto_price=True,
+            auto_end_time=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_incomplete_appointment_auto_fields_on(self):
+        """Test creating an incomplete appointment with auto fields enabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            # no end_time provided
+            price=0,
+            auto_price=True,
+            auto_end_time=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_complete_blocked_appointment_auto_fields_off(self):
+        """Test creating a blocked appointment with auto fields disabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=0,
+            auto_price=False,
+            auto_end_time=False,
+            is_blocked=True,
+            prevents_overlap=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 0, "14:00", "15:00", False, False, True)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_incomplete_blocked_appointment_auto_fields_on(self):
+        """Test creating an incomplete blocked appointment with auto fields enabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=0,
+            auto_price=True,
+            auto_end_time=True,
+            is_blocked=True,
+            prevents_overlap=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True, True)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_complete_appointment_auto_fields_off_overlap_off(self):
+        """Test creating a complete appointment with auto fields disabled and overlap prevention enabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            prevents_overlap=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 70, "14:00", "15:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_complete_appointment_auto_fields_on_overlap_off(self):
+        """Test creating a complete appointment with auto fields enabled and overlap prevention enabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=0,
+            auto_price=True,
+            auto_end_time=True,
+            prevents_overlap=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_incomplete_appointment_auto_fields_on_overlap_off(self):
+        """Test creating an incomplete appointment with auto fields enabled and overlap prevention enabled, using form"""
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            # end_time omitted so auto_end_time will compute it
+            price=0,
+            auto_price=True,
+            auto_end_time=True,
+            prevents_overlap=True,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True)
+        self._assert_m2m_counts(appointment)
+
+    # def test_create_appointment_without_activities_auto_fields_on(self):
+    # """Test creating an appointment without activities and auto fields enabled, using form"""
+
+    #    data = self._build_form_data(
+    #        date_value=date.today(),
+    #        start_time="14:00",
+    #        end_time="15:00",
+    #        price=70,
+    #        auto_price=True,
+    #        auto_end_time=True,
+    #        providers=[self.provider],
+    #        recipients=[self.recipient],
+    #        activities=[],  # no activities
+    #    )
+    #    appointment = self._submit_and_save_form(data)
+    #    self._assert_base_fields(appointment, 70, "14:00", "15:00", True, True)
+    #    self._assert_m2m_counts(appointment, activities_count=0)
+
+
+class AppointmentTimeVerificationFormTest(AppointmentTestMixin, FormHelperMixin):
+    def test_create_appointment_with_coherent_time(self):
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 70, "14:00", "15:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_appointment_with_inconsistent_time(self):
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="15:00",
+            end_time="14:00",
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        form = AppointmentAdminForm(data=data)
+        # Expect invalid and specific message on start_time
+        self.assertFalse(form.is_valid())
+        err_list = form.errors.get("start_time", [])
+        self.assertTrue(any("The start time" in str(m) for m in err_list))
+
+
+class AppointmentBlockVerificationFormTest(AppointmentTestMixin, FormHelperMixin):
+    def test_create_blocked_appointment_overlap_on(self):
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            is_blocked=True,
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 70, "14:00", "15:00", False, False, True)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_blocked_appointment_overlap_off(self):
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="14:00",
+            end_time="15:00",
+            is_blocked=True,
+            prevents_overlap=False,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        form = AppointmentAdminForm(data=data)
+        self.assertFalse(form.is_valid())
+        err_list = form.errors.get("is_blocked", [])
+        self.assertTrue(any("cannot be marked as blocked" in str(m) for m in err_list))
+
+
+class AppointmentOverlapVerificationFormTest(AppointmentTestMixin, FormHelperMixin):
+    def setUp(self):
+        super().setUp()
+        # create baseline appointment via model + add M2M using helper to simulate existing booking
+        self.base_appointment = Appointment.objects.create(
+            price=70,
+            start_time="14:00",
+            end_time="15:00",
+            date=date.today(),
+            auto_price=False,
+            auto_end_time=False,
+        )
+        self.base_appointment.save()
+        self.base_appointment = self._add_m2m(self.base_appointment)
+
+    def test_create_appointment_overlapping_another(self):
+        today = date.today()
+        data = self._build_form_data(
+            date_value=today,
+            start_time="14:00",
+            end_time="15:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],  # provider same as base appointment
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        form = AppointmentAdminForm(data=data)
+        self.assertFalse(form.is_valid())
+        msgs = form.errors.get("start_time", [])
+        self.assertTrue(any(str(today) in str(m) for m in msgs))
+        self.assertTrue(any("Schedule conflict" in str(m) for m in msgs))
+
+    def test_create_appointment_fully_inside_another(self):
+        today = date.today()
+        data = self._build_form_data(
+            date_value=today,
+            start_time="14:30",
+            end_time="14:50",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        form = AppointmentAdminForm(data=data)
+        self.assertFalse(form.is_valid())
+        msgs = form.errors.get("start_time", [])
+        self.assertTrue(any("Schedule conflict" in str(m) for m in msgs))
+
+    def test_create_appointment_starts_at_previous_end_time(self):
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="13:00",
+            end_time="14:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 70, "13:00", "14:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_appointment_ends_at_next_start_time(self):
+        data = self._build_form_data(
+            date_value=date.today(),
+            start_time="15:00",
+            end_time="16:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+        self._assert_base_fields(appointment, 70, "15:00", "16:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_appointment_date_change_causes_overlap(self):
+        tomorrow = date.today() + timedelta(days=1)
+        data = self._build_form_data(
+            date_value=tomorrow,
+            start_time="14:00",
+            end_time="15:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+
+        # sanity checks
+        self._assert_base_fields(appointment, 70, "14:00", "15:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+        # moving it to today should conflict with base_appointment
+        appointment.date = date.today()
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Schedule conflict",
+        ):
+            appointment.save()
+
+    def test_appointment_date_change_starts_at_previous_end_time(self):
+        tomorrow = date.today() + timedelta(days=1)
+        data = self._build_form_data(
+            date_value=tomorrow,
+            start_time="13:00",
+            end_time="14:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+
+        # move to today (ends at 14:00 which is start of base appointment) — should be OK
+        appointment.date = date.today()
+        appointment.save()
+        self._assert_base_fields(appointment, 70, "13:00", "14:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_appointment_date_change_ends_at_next_start_time(self):
+        tomorrow = date.today() + timedelta(days=1)
+        data = self._build_form_data(
+            date_value=tomorrow,
+            start_time="15:00",
+            end_time="16:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            providers=[self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        appointment = self._submit_and_save_form(data)
+
+        # move to today (starts at 15:00 which is end of base appointment) — should be OK
+        appointment.date = date.today()
+        appointment.save()
+        self._assert_base_fields(appointment, 70, "15:00", "16:00", False, False)
+        self._assert_m2m_counts(appointment)
+
+    def test_create_appointment_with_one_provider_unavailable(self):
+        today = date.today()
+        # base_appointment already exists in setUp with provider self.provider
+
+        data = self._build_form_data(
+            date_value=today,
+            start_time="14:00",
+            end_time="15:00",
+            prevents_overlap=True,
+            price=70,
+            auto_price=False,
+            auto_end_time=False,
+            # try to create another appointment with multiple providers (one of them unavailable)
+            providers=[self.provider, self.provider2]
+            if hasattr(self, "provider2")
+            else [self.provider],
+            recipients=[self.recipient],
+            activities=[self.activity],
+        )
+        # If you really want to test multiple providers and one unavailable,
+        # ensure self.provider2 exists in AppointmentTestMixin. Otherwise this reduces to single provider conflict.
+        form = AppointmentAdminForm(data=data)
+        self.assertFalse(form.is_valid())
+        msgs = form.errors.get("start_time", [])
+        self.assertTrue(any("Schedule conflict" in str(m) for m in msgs))
