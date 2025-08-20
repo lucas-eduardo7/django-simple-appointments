@@ -1,8 +1,9 @@
-from django.test import TestCase
-from django.core.exceptions import ValidationError
+from datetime import date, timedelta, time
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
+from django.urls import reverse
 from model_bakery import baker
-from datetime import date, timedelta
 from .models import Appointment
 from .forms import AppointmentAdminForm
 
@@ -1385,3 +1386,290 @@ class AppointmentAutoFieldsOnActivityUpdateFormTest(
 
         appointment.refresh_from_db()
         self._assert_base_fields(appointment, 100, "14:00", "15:30", True, True)
+
+
+class FormWizardTestMixin(TestCase):
+    def setUp(self):
+        """
+        Store the URL of the first valid step to reuse in tests.
+        This represents the initial step of the form wizard.
+        """
+        self.initial_step = reverse("wizard", kwargs={"step": 1})
+        self.provider = baker.make(USER, username="provider")
+        self.recipient = baker.make(USER, username="recipient")
+        self.activity = baker.make("activities.Activity", name="activity")
+
+        self.provider2 = baker.make(USER, username="provider2")
+        self.recipient2 = baker.make(USER, username="recipient2")
+        self.activity2 = baker.make("activities.Activity", name="activity2")
+
+
+@override_settings(ROOT_URLCONF="tests.urls")
+class FormWizardViewStructuralTests(FormWizardTestMixin):
+    def test_load_initial_step(self):
+        """
+        Test that the first step of the wizard loads successfully.
+        Ensures the view returns HTTP 200 for the initial step.
+        """
+        url = self.initial_step
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_redirect_if_step_does_not_exist(self):
+        """
+        Test the behavior when a non-existent step is requested.
+        The wizard should redirect to the initial step.
+        """
+        url = reverse("wizard", kwargs={"step": 100})
+        response = self.client.get(url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request["PATH_INFO"], self.initial_step)
+
+    def test_redirect_if_previous_step_not_completed(self):
+        """
+        Test the behavior when requesting a step whose previous step
+        has not been completed. The wizard should redirect to the first step.
+        """
+        url = reverse("wizard", kwargs={"step": 2})
+        response = self.client.get(url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request["PATH_INFO"], self.initial_step)
+
+
+@override_settings(ROOT_URLCONF="tests.urls")
+class FormWizardFlowTests(FormWizardTestMixin):
+    def _advance_to_step(self, step, follow=False):
+        url = reverse("wizard", kwargs={"step": 1})
+
+        if step >= 1:
+            data = {"recipients": [self.recipient.pk, self.recipient2.pk]}
+            response = self.client.post(url, data=data, follow=follow)
+            url = response.request["PATH_INFO"]
+
+        if step >= 2:
+            data = {"providers": [self.provider.pk, self.provider2.pk]}
+            response = self.client.post(url, data=data, follow=follow)
+            url = response.request["PATH_INFO"]
+
+        if step >= 3:
+            data = {"activities": [self.activity.pk, self.activity2.pk]}
+            response = self.client.post(url, data=data, follow=follow)
+            url = response.request["PATH_INFO"]
+
+        if step >= 4:
+            data = {"date": date.today()}
+            response = self.client.post(url, data=data, follow=follow)
+            url = response.request["PATH_INFO"]
+
+        if step >= 5:
+            data = {"start_time": time(8, 0)}
+            response = self.client.post(url, data=data, follow=follow)
+            url = response.request["PATH_INFO"]
+
+        return response
+
+    def test_step1_loads_with_correct_choices(self):
+        url = self.initial_step
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 1)
+        self.assertContains(response, self.recipient.username)
+        self.assertContains(response, self.recipient2.username)
+
+    def test_step1_invalid_null_data(self):
+        url = self.initial_step
+        response = self.client.post(url, data={}, follow=True)
+
+        form = response.context["form"]
+
+        self.assertIn("recipients", form.errors)
+        self.assertEqual(form.errors["recipients"], ["This field is required."])
+
+        self.assertEqual(response.request["PATH_INFO"], self.initial_step)
+
+    def test_step1_valid_data_advances_to_next_step(self):
+        response = self._advance_to_step(1)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("wizard", kwargs={"step": 2}))
+
+    def test_step2_loads_with_correct_choices(self):
+        response = self._advance_to_step(1, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 2)
+        self.assertContains(response, self.provider.username)
+        self.assertContains(response, self.provider2.username)
+
+    def test_step2_invalid_null_data(self):
+        response = self._advance_to_step(1, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.post(url, data={})
+        form = response.context["form"]
+
+        self.assertIn("providers", form.errors)
+        self.assertEqual(response.context["step"], 2)
+        self.assertEqual(form.errors["providers"], ["This field is required."])
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 2})
+        )
+
+    def test_step2_valid_data_advances_to_next_step(self):
+        response = self._advance_to_step(2, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 3)
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 3})
+        )
+
+    def test_step3_loads_with_correct_choices(self):
+        response = self._advance_to_step(2, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 3)
+        self.assertContains(response, self.activity.name)
+        self.assertContains(response, self.activity2.name)
+
+    def test_step3_invalid_null_data(self):
+        response = self._advance_to_step(2, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.post(url, data={})
+
+        form = response.context["form"]
+
+        self.assertIn("activities", form.errors)
+        self.assertEqual(response.context["step"], 3)
+        self.assertEqual(form.errors["activities"], ["This field is required."])
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 3})
+        )
+
+    def test_step3_valid_data_advances_to_next_step(self):
+        response = self._advance_to_step(3, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 4)
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 4})
+        )
+
+    def test_step4_loads_with_correct_choices(self):
+        response = self._advance_to_step(3, follow=True)
+
+        response = self.client.get(reverse("wizard", kwargs={"step": 4}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 4)
+        self.assertContains(response, 'name="date"')
+
+    def test_step4_invalid_null_data(self):
+        response = self._advance_to_step(3, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.post(url, data={})
+        form = response.context["form"]
+
+        self.assertIn("date", form.errors)
+        self.assertEqual(response.context["step"], 4)
+        self.assertEqual(form.errors["date"], ["This field is required."])
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 4})
+        )
+
+    def test_step4_valid_data_advances_to_next_step(self):
+        response = self._advance_to_step(3, follow=True)
+        url = response.request["PATH_INFO"]
+
+        data = {"date": date.today().isoformat()}
+        response = self.client.post(url, data=data, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 5)
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 5})
+        )
+
+    def test_step5_loads_with_correct_choices(self):
+        response = self._advance_to_step(4, follow=True)
+
+        response = self.client.get(reverse("wizard", kwargs={"step": 5}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 5)
+        self.assertContains(response, 'name="start_time"')
+
+    def test_step5_invalid_null_data(self):
+        response = self._advance_to_step(4, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.post(url, data={})
+        form = response.context["form"]
+
+        self.assertIn("start_time", form.errors)
+        self.assertEqual(response.context["step"], 5)
+        self.assertEqual(form.errors["start_time"], ["This field is required."])
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 5})
+        )
+
+    def test_step5_valid_data_advances_to_next_step(self):
+        response = self._advance_to_step(4, follow=True)
+        url = response.request["PATH_INFO"]
+
+        data = {"start_time": time(8, 0).isoformat()}
+        response = self.client.post(url, data=data, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 6)
+        self.assertEqual(
+            response.request["PATH_INFO"], reverse("wizard", kwargs={"step": 6})
+        )
+
+    def test_step6_loads_confirmation(self):
+        response = self._advance_to_step(5, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["step"], 6)
+        self.assertContains(response, "submit")
+
+    def test_step6_post_without_data(self):
+        response = self._advance_to_step(5, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.post(url, data={}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Appointment created successfully!")
+
+    def test_step6_post_creates_appointment(self):
+        self.assertEqual(Appointment.objects.count(), 0)
+
+        response = self._advance_to_step(5, follow=True)
+        url = response.request["PATH_INFO"]
+
+        response = self.client.post(url, data={}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.request["PATH_INFO"], reverse("wizard_success"))
+
+        self.assertEqual(Appointment.objects.count(), 1)
+        appointment = Appointment.objects.first()
+
+        self.assertEqual(
+            [r.pk for r in appointment.recipients.all()],
+            [self.recipient.pk, self.recipient2.pk],
+        )
+        self.assertEqual(
+            [p.pk for p in appointment.providers.all()],
+            [self.provider.pk, self.provider2.pk],
+        )
+        self.assertEqual(
+            [a.pk for a in appointment.activities.all()],
+            [self.activity.pk, self.activity2.pk],
+        )
