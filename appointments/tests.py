@@ -1397,11 +1397,15 @@ class FormWizardTestMixin(TestCase):
         self.initial_step = reverse("wizard", kwargs={"step": 1})
         self.provider = baker.make(USER, username="provider")
         self.recipient = baker.make(USER, username="recipient")
-        self.activity = baker.make("activities.Activity", name="activity")
+        self.activity = baker.make(
+            "activities.Activity", name="activity", duration_time=timedelta(minutes=60)
+        )
 
         self.provider2 = baker.make(USER, username="provider2")
         self.recipient2 = baker.make(USER, username="recipient2")
-        self.activity2 = baker.make("activities.Activity", name="activity2")
+        self.activity2 = baker.make(
+            "activities.Activity", name="activity2", duration_time=timedelta(minutes=60)
+        )
 
 
 @override_settings(ROOT_URLCONF="tests.urls")
@@ -1441,7 +1445,43 @@ class FormWizardViewStructuralTests(FormWizardTestMixin):
 
 @override_settings(ROOT_URLCONF="tests.urls")
 class FormWizardFlowTests(FormWizardTestMixin):
+    def setUp(self):
+        super().setUp()
+        # Create sample appointments with different times and constraints
+        self.ap1 = baker.make(
+            Appointment,
+            start_time=time(8, 0),
+            end_time=time(8, 0),
+            auto_end_time=False,
+            is_blocked=False,
+            prevents_overlap=False,
+        )
+        self.ap2 = baker.make(
+            Appointment,
+            start_time=time(10, 0),
+            end_time=time(11, 30),
+            auto_end_time=False,
+            is_blocked=False,
+        )
+        self.ap3 = baker.make(
+            Appointment,
+            start_time=time(11, 30),
+            end_time=time(12, 0),
+            auto_end_time=False,
+            is_blocked=True,
+        )
+
+        # Link recipients, providers and activities to the created appointments
+        for appointment in [self.ap1, self.ap2, self.ap3]:
+            appointment.recipients.add(self.recipient)
+            appointment.providers.add(self.provider)
+            appointment.activities.add(self.activity)
+
     def _advance_to_step(self, step, follow=False):
+        """
+        Helper method that simulates going through the wizard step by step.
+        Automatically fills in each step with valid data until reaching the given step.
+        """
         url = reverse("wizard", kwargs={"step": 1})
 
         if step >= 1:
@@ -1472,6 +1512,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         return response
 
     def test_step1_loads_with_correct_choices(self):
+        """Step 1 should load with the available recipients as choices."""
         url = self.initial_step
         response = self.client.get(url)
 
@@ -1481,6 +1522,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertContains(response, self.recipient2.username)
 
     def test_step1_invalid_null_data(self):
+        """Submitting step 1 without recipients should return validation errors."""
         url = self.initial_step
         response = self.client.post(url, data={}, follow=True)
 
@@ -1488,16 +1530,17 @@ class FormWizardFlowTests(FormWizardTestMixin):
 
         self.assertIn("recipients", form.errors)
         self.assertEqual(form.errors["recipients"], ["This field is required."])
-
         self.assertEqual(response.request["PATH_INFO"], self.initial_step)
 
     def test_step1_valid_data_advances_to_next_step(self):
+        """Valid recipients selection should redirect to step 2."""
         response = self._advance_to_step(1)
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("wizard", kwargs={"step": 2}))
 
     def test_step2_loads_with_correct_choices(self):
+        """Step 2 should load with the available providers as choices."""
         response = self._advance_to_step(1, follow=True)
 
         self.assertEqual(response.status_code, 200)
@@ -1506,6 +1549,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertContains(response, self.provider2.username)
 
     def test_step2_invalid_null_data(self):
+        """Submitting step 2 without providers should return validation errors."""
         response = self._advance_to_step(1, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1520,6 +1564,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step2_valid_data_advances_to_next_step(self):
+        """Valid providers selection should redirect to step 3."""
         response = self._advance_to_step(2, follow=True)
 
         self.assertEqual(response.status_code, 200)
@@ -1529,6 +1574,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step3_loads_with_correct_choices(self):
+        """Step 3 should load with the available activities as choices."""
         response = self._advance_to_step(2, follow=True)
 
         self.assertEqual(response.status_code, 200)
@@ -1537,11 +1583,11 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertContains(response, self.activity2.name)
 
     def test_step3_invalid_null_data(self):
+        """Submitting step 3 without activities should return validation errors."""
         response = self._advance_to_step(2, follow=True)
         url = response.request["PATH_INFO"]
 
         response = self.client.post(url, data={})
-
         form = response.context["form"]
 
         self.assertIn("activities", form.errors)
@@ -1552,6 +1598,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step3_valid_data_advances_to_next_step(self):
+        """Valid activities selection should redirect to step 4."""
         response = self._advance_to_step(3, follow=True)
 
         self.assertEqual(response.status_code, 200)
@@ -1561,6 +1608,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step4_loads_with_correct_choices(self):
+        """Step 4 should load with a date picker field."""
         response = self._advance_to_step(3, follow=True)
 
         response = self.client.get(reverse("wizard", kwargs={"step": 4}))
@@ -1569,6 +1617,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertContains(response, 'name="date"')
 
     def test_step4_invalid_null_data(self):
+        """Submitting step 4 without a date should return validation errors."""
         response = self._advance_to_step(3, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1583,6 +1632,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step4_valid_data_advances_to_next_step(self):
+        """Valid date selection should redirect to step 5."""
         response = self._advance_to_step(3, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1596,6 +1646,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step5_loads_with_correct_choices(self):
+        """Step 5 should load available start times, excluding unavailable slots."""
         response = self._advance_to_step(4, follow=True)
 
         response = self.client.get(reverse("wizard", kwargs={"step": 5}))
@@ -1603,7 +1654,24 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertEqual(response.context["step"], 5)
         self.assertContains(response, 'name="start_time"')
 
+        form = response.context["form"]
+        choices = form.fields["start_time"].choices
+
+        # Validate availability due to already scheduled appointments
+        self.assertIn(("08:00:00", "08:00"), choices)
+        self.assertNotIn(("10:00:00", "10:00"), choices)
+        self.assertNotIn(("11:30:00", "11:30"), choices)
+        self.assertNotIn(("11:40:00", "11:40"), choices)
+        self.assertNotIn(("11:50:00", "11:50"), choices)
+        self.assertNotIn(("12:00:00", "12:00"), choices)
+
+        # Validate availability according to default generation boundaries
+        self.assertNotIn(("07:50:00", "07:50"), choices)
+        self.assertNotIn(("18:10:00", "18:10"), choices)
+        self.assertIn(("16:00:00", "16:00"), choices)
+
     def test_step5_invalid_null_data(self):
+        """Submitting step 5 without selecting a start time should return validation errors."""
         response = self._advance_to_step(4, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1618,6 +1686,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step5_valid_data_advances_to_next_step(self):
+        """Valid start time selection should redirect to step 6 (confirmation)."""
         response = self._advance_to_step(4, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1631,6 +1700,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         )
 
     def test_step6_loads_confirmation(self):
+        """Step 6 should display the confirmation button."""
         response = self._advance_to_step(5, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1640,6 +1710,7 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertContains(response, "submit")
 
     def test_step6_post_without_data(self):
+        """Posting step 6 without additional data should finalize and create the appointment."""
         response = self._advance_to_step(5, follow=True)
         url = response.request["PATH_INFO"]
 
@@ -1648,7 +1719,13 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertContains(response, "Appointment created successfully!")
 
     def test_step6_post_creates_appointment(self):
-        self.assertEqual(Appointment.objects.count(), 0)
+        """Final step should create a new appointment with all selected recipients, providers, and activities."""
+        self.assertEqual(
+            Appointment.objects.exclude(
+                pk__in=[self.ap1.pk, self.ap2.pk, self.ap3.pk]
+            ).count(),
+            0,
+        )
 
         response = self._advance_to_step(5, follow=True)
         url = response.request["PATH_INFO"]
@@ -1658,8 +1735,13 @@ class FormWizardFlowTests(FormWizardTestMixin):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.request["PATH_INFO"], reverse("wizard_success"))
 
-        self.assertEqual(Appointment.objects.count(), 1)
-        appointment = Appointment.objects.first()
+        self.assertEqual(
+            Appointment.objects.exclude(
+                pk__in=[self.ap1.pk, self.ap2.pk, self.ap3.pk]
+            ).count(),
+            1,
+        )
+        appointment = Appointment.objects.last()
 
         self.assertEqual(
             [r.pk for r in appointment.recipients.all()],
