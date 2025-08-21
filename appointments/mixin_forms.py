@@ -1,5 +1,5 @@
 from .models import Appointment
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta, date
 from .utils import (
     validate_time_cohesion,
     validate_blocked_cohesion,
