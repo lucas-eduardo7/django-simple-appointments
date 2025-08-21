@@ -1,10 +1,16 @@
 from django.contrib import admin
 from .models import (
+    Activity,
     Appointment,
     AppointmentActivity,
     AppointmentProvider,
     AppointmentRecipient,
 )
+
+
+@admin.register(Activity)
+class ActivityAdmin(admin.ModelAdmin):
+    pass
 
 
 class AppointmentActivitiesInline(admin.TabularInline):
