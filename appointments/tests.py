@@ -1,3 +1,4 @@
+from django.conf import settings
 from datetime import date, timedelta, time
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -1444,6 +1445,15 @@ class FormWizardViewStructuralTests(FormWizardTestMixin):
 
 
 @override_settings(ROOT_URLCONF="tests.urls")
+@override_settings(
+    ROOT_URLCONF="tests.urls",
+    TEMPLATES=[
+        {
+            **settings.TEMPLATES[0],
+            "DIRS": ["tests/templates"],
+        }
+    ],
+)
 class FormWizardFlowTests(FormWizardTestMixin):
     def setUp(self):
         super().setUp()
