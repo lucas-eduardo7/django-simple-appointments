@@ -16,7 +16,7 @@ class AppointmentValidateMixin:
         self._validate_conflicts()
 
     def _get_queryset(self):
-        Appointment = apps.get_model("appointments", "Appointment")
+        Appointment = apps.get_model("simple_appointments", "Appointment")
         return Appointment.objects.filter(
             prevents_overlap=True,
             date=self.date,

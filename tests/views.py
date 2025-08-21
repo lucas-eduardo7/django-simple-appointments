@@ -1,4 +1,4 @@
-from appointments.views import FormWizardView
+from simple_appointments.views import FormWizardView
 from django.shortcuts import render
 from django.views import View
 

@@ -5,7 +5,7 @@ def validate_appointments_conflicts(instance, provider, queryset=None):
     if not instance.prevents_overlap:
         return None
 
-    Appointment = apps.get_model("appointments", "Appointment")
+    Appointment = apps.get_model("simple_appointments", "Appointment")
 
     if queryset is None:
         queryset = Appointment.objects.filter(
