@@ -102,13 +102,13 @@ class AppointmentBuilderMixin:
             "providers": [
                 p.pk
                 for p in self._get_objects(
-                    "APPOINTMENTS_PROVIDER_MODEL", form_data["providers"]
+                    "APPOINTMENTS_PROVIDERS_MODEL", form_data["providers"]
                 )
             ],
             "recipients": [
                 r.pk
                 for r in self._get_objects(
-                    "APPOINTMENTS_RECIPIENT_MODEL", form_data["recipients"]
+                    "APPOINTMENTS_RECIPIENTS_MODEL", form_data["recipients"]
                 )
             ],
             "activities": [
@@ -168,7 +168,7 @@ class FormWizardView(AppointmentBuilderMixin, BaseFormWizardView):
         if form_class == self.get_time_step_form():
             selected_date = date.fromisoformat(form_data.get("date"))
             providers = self._get_objects(
-                "APPOINTMENTS_PROVIDER_MODEL", form_data.get("providers")
+                "APPOINTMENTS_PROVIDERS_MODEL", form_data.get("providers")
             )
             activities = self._get_objects(
                 "APPOINTMENTS_ACTIVITIES_MODEL", form_data.get("activities")

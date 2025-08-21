@@ -10,12 +10,12 @@ from .mixin_models import (
 
 class Appointment(BaseModel, AppointmentValidateMixin):
     providers = models.ManyToManyField(
-        to=get_setting("APPOINTMENTS_PROVIDER_MODEL"),
+        to=get_setting("APPOINTMENTS_PROVIDERS_MODEL"),
         through="AppointmentProvider",
         related_name="appointments_as_provider",
     )
     recipients = models.ManyToManyField(
-        to=get_setting("APPOINTMENTS_RECIPIENT_MODEL"),
+        to=get_setting("APPOINTMENTS_RECIPIENTS_MODEL"),
         through="AppointmentRecipient",
         related_name="appointments_as_recipient",
     )
@@ -59,7 +59,7 @@ class Appointment(BaseModel, AppointmentValidateMixin):
 class AppointmentProvider(BaseModel, ProviderValidateMixin):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     provider = models.ForeignKey(
-        to=get_setting("APPOINTMENTS_PROVIDER_MODEL"), on_delete=models.CASCADE
+        to=get_setting("APPOINTMENTS_PROVIDERS_MODEL"), on_delete=models.CASCADE
     )
 
     class Meta:
@@ -74,7 +74,7 @@ class AppointmentProvider(BaseModel, ProviderValidateMixin):
 class AppointmentRecipient(BaseModel):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE)
     recipient = models.ForeignKey(
-        to=get_setting("APPOINTMENTS_RECIPIENT_MODEL"), on_delete=models.CASCADE
+        to=get_setting("APPOINTMENTS_RECIPIENTS_MODEL"), on_delete=models.CASCADE
     )
 
     class Meta:

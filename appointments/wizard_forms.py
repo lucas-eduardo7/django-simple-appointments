@@ -7,7 +7,7 @@ from .mixin_forms import TimeStepFormMixin
 
 class RecipientsStepForm(forms.Form):
     def get_model():
-        app, model = get_setting("APPOINTMENTS_RECIPIENT_MODEL").split(".")
+        app, model = get_setting("APPOINTMENTS_RECIPIENTS_MODEL").split(".")
         return apps.get_model(app, model)
 
     recipients = forms.ModelMultipleChoiceField(
@@ -19,7 +19,7 @@ class RecipientsStepForm(forms.Form):
 
 class ProviderStepForm(forms.Form):
     def get_model():
-        app, model = get_setting("APPOINTMENTS_PROVIDER_MODEL").split(".")
+        app, model = get_setting("APPOINTMENTS_PROVIDERS_MODEL").split(".")
         return apps.get_model(app, model)
 
     providers = forms.ModelMultipleChoiceField(
