@@ -1,5 +1,5 @@
 from .models import Appointment
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, time
 from .utils import (
     validate_time_cohesion,
     validate_blocked_cohesion,
@@ -112,3 +112,84 @@ class AppointmentValidatorPipeline:
             step(self.form)
             if self.form.errors:
                 break
+
+
+class TimeStepFormMixin:
+    def _get_appointments_for_date(self, date, providers):
+        appointments = Appointment.objects.filter(
+            date=date,
+            providers__in=providers,
+            prevents_overlap=True,
+        )
+        return appointments
+
+    def _get_unavailable_slots(self, date, providers):
+        appointments = self._get_appointments_for_date(date, providers)
+        slots = tuple()
+
+        for appointment in appointments:
+            slots += self._generate_time_slots(
+                appointment.start_time, appointment.end_time
+            )
+        return slots
+
+    def _get_available_slots(
+        self, date, providers, start, end, interval=timedelta(minutes=10)
+    ):
+        slots = []
+        current = datetime.combine(datetime.today(), start)
+        end_dt = datetime.combine(datetime.today(), end)
+        unavailable = self._get_unavailable_slots(date, providers)
+
+        while current <= end_dt:
+            slot = current.time().strftime("%H:%M:%S")
+            if slot not in unavailable:
+                slots.append(slot)
+
+            current += interval
+
+        return tuple(slots)
+
+    def _generate_time_slots(self, start, end, interval=timedelta(minutes=10)):
+        slots = []
+        current = datetime.combine(datetime.today(), start)
+        end_dt = datetime.combine(datetime.today(), end)
+
+        while current <= end_dt:
+            slots.append(current.time().strftime("%H:%M:%S"))
+            current += interval
+
+        return tuple(slots)
+
+    def _slots_covering_duration(self, slots, activities, interval):
+        total_duration = sum(
+            (activity.duration_time for activity in activities), timedelta()
+        )
+        valid_slots = []
+
+        for slot in slots:
+            start = datetime.strptime(slot, "%H:%M:%S").time()
+            end = (datetime.combine(datetime.today(), start) + total_duration).time()
+
+            required_slots = self._generate_time_slots(start, end, interval)
+
+            # Exclude the last slot from required_slots to allow appointments
+            # to end exactly when another appointment starts, preventing false overlaps
+            if self._has_all_required_slots(required_slots[:-1], slots):
+                valid_slots.append(slot)
+
+        return valid_slots
+
+    def _has_all_required_slots(self, required_slots, free_slots):
+        return set(required_slots) <= set(free_slots)
+
+    def get_slot_choices(
+        self, date, providers, start, end, activities, interval=timedelta(minutes=10)
+    ):
+        available_slots = self._get_available_slots(
+            date, providers, start, end, interval
+        )
+        valid_slots = self._slots_covering_duration(
+            available_slots, activities, interval
+        )
+        return [(slot, slot[:-3]) for slot in valid_slots]
