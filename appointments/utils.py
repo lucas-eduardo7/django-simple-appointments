@@ -32,7 +32,7 @@ def validate_appointments_conflicts(instance, provider, queryset=None):
 def validate_time_cohesion(start_time, end_time):
     if not end_time:
         return None
-    if start_time > end_time:
+    if start_time is None or start_time > end_time:
         return f"The start time ({start_time}) must be earlier than the end time ({end_time})."
     return None
 
