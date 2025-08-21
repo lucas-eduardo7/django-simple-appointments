@@ -14,6 +14,10 @@ class Activity(models.Model):
     price = models.DecimalField(max_digits=7, decimal_places=2)
     duration_time = models.DurationField(default=timedelta(hours=1))
 
+    class Meta:
+        verbose_name = "activity"
+        verbose_name_plural = "activities"
+
     def __str__(self):
         return self.name
 
