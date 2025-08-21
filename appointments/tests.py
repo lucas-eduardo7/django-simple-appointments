@@ -16,7 +16,7 @@ class AppointmentTestMixin(TestCase):
     def setUp(self):
         """Prepare test data: one activity, one provider user, and one recipient user."""
         self.activity = baker.make(
-            "activities.Activity",
+            "appointments.Activity",
             name="test",
             price="100",
             duration_time=timedelta(minutes=90),
@@ -1399,13 +1399,17 @@ class FormWizardTestMixin(TestCase):
         self.provider = baker.make(USER, username="provider")
         self.recipient = baker.make(USER, username="recipient")
         self.activity = baker.make(
-            "activities.Activity", name="activity", duration_time=timedelta(minutes=60)
+            "appointments.Activity",
+            name="activity",
+            duration_time=timedelta(minutes=60),
         )
 
         self.provider2 = baker.make(USER, username="provider2")
         self.recipient2 = baker.make(USER, username="recipient2")
         self.activity2 = baker.make(
-            "activities.Activity", name="activity2", duration_time=timedelta(minutes=60)
+            "appointments.Activity",
+            name="activity2",
+            duration_time=timedelta(minutes=60),
         )
 
 

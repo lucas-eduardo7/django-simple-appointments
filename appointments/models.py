@@ -1,4 +1,5 @@
 from django.db import models
+from datetime import timedelta
 from .conf import get_setting
 from .abstract_models import BaseModel, AppointmentAcitivityBaseModel
 from .mixin_models import (
@@ -6,6 +7,15 @@ from .mixin_models import (
     ProviderValidateMixin,
     ActivityMixin,
 )
+
+
+class Activity(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    price = models.DecimalField(max_digits=7, decimal_places=2)
+    duration_time = models.DurationField(default=timedelta(hours=1))
+
+    def __str__(self):
+        return self.name
 
 
 class Appointment(BaseModel, AppointmentValidateMixin):
