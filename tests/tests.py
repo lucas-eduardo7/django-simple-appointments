@@ -1,13 +1,17 @@
+import os
+import tempfile
+import types
 from django.conf import settings
 from datetime import date, timedelta, time
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
-from django.urls import reverse
+from django.urls import reverse, path
+from django.views.generic import TemplateView
 from model_bakery import baker
 from simple_appointments.models import Appointment
 from simple_appointments.forms import AppointmentAdminForm
-
+from simple_appointments.views import FormWizardView
 
 USER = get_user_model()
 
@@ -1390,30 +1394,113 @@ class AppointmentAutoFieldsOnActivityUpdateFormTest(
 
 
 class FormWizardTestMixin(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Call parent setUpClass to ensure proper test setup
+        super().setUpClass()
+
+        # Create a temporary directory to store test templates
+        cls.template_dir = tempfile.TemporaryDirectory()
+        # Define path for a minimal test template
+        template_path = os.path.join(cls.template_dir.name, "home.html")
+        with open(template_path, "w") as f:
+            # Write a simple HTML template that renders a form and optional message
+            f.write("""
+            <html>
+            <body>
+            {% if message %}<p>{{ message }}</p>{% endif %}
+            <form method="post">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <button type="submit">Next</button>
+            </form>
+            </body>
+            </html>
+            """)
+
+        # Define a test-specific FormWizardView subclass for testing
+        class TestFormWizardView(FormWizardView):
+            # Set the template to the temporary home.html
+            template_name = "home.html"
+            # Define the URL name for wizard steps
+            next_url = "wizard"
+            # Define the success URL after wizard completion
+            success_url = "wizard_success"
+
+        # Define a test-specific success view to simulate wizard completion
+        class TestSuccessView(TemplateView):
+            # Use the same template as the wizard
+            template_name = "home.html"
+
+            def get_context_data(self, **kwargs):
+                # Add success message to context for rendering
+                context = super().get_context_data(**kwargs)
+                context["message"] = "Appointment created successfully!"
+                return context
+
+        # Create a temporary URL configuration module for testing
+        cls.urls_module = types.ModuleType("test_urls")
+        # Define URL patterns for the wizard and success views
+        cls.urls_module.urlpatterns = [
+            path("wizard/<int:step>/", TestFormWizardView.as_view(), name="wizard"),
+            path("wizard_success/", TestSuccessView.as_view(), name="wizard_success"),
+        ]
+
     def setUp(self):
         """
         Store the URL of the first valid step to reuse in tests.
         This represents the initial step of the form wizard.
         """
+        # Override ROOT_URLCONF with the temporary URL module
+        self._urlconf_setup = override_settings(ROOT_URLCONF=self.urls_module)
+        self._urlconf_setup.enable()
+
+        # Override TEMPLATES setting to include the temporary template directory
+        self._template_setup = override_settings(
+            TEMPLATES=[
+                {
+                    **settings.TEMPLATES[0],  # Preserve existing template settings
+                    "DIRS": [self.template_dir.name]  # Add temporary template directory
+                    + settings.TEMPLATES[0].get("DIRS", []),  # Append existing DIRS
+                }
+            ]
+        )
+        self._template_setup.enable()
+
+        # Store the URL for the first wizard step
         self.initial_step = reverse("wizard", kwargs={"step": 1})
-        self.provider = baker.make(USER, username="provider")
-        self.recipient = baker.make(USER, username="recipient")
+
+        # Create test data using model-bakery
+        self.provider = baker.make("auth.User", username="provider")
+        self.recipient = baker.make("auth.User", username="recipient")
         self.activity = baker.make(
             "simple_appointments.Activity",
             name="activity",
             duration_time=timedelta(minutes=60),
         )
-
-        self.provider2 = baker.make(USER, username="provider2")
-        self.recipient2 = baker.make(USER, username="recipient2")
+        self.provider2 = baker.make("auth.User", username="provider2")
+        self.recipient2 = baker.make("auth.User", username="recipient2")
         self.activity2 = baker.make(
             "simple_appointments.Activity",
             name="activity2",
             duration_time=timedelta(minutes=60),
         )
 
+    def tearDown(self):
+        # Disable the overridden settings to clean up after each test
+        self._template_setup.disable()
+        self._urlconf_setup.disable()
+        # Call parent tearDown to ensure proper cleanup
+        super().tearDown()
 
-@override_settings(ROOT_URLCONF="tests.urls")
+    @classmethod
+    def tearDownClass(cls):
+        # Clean up the temporary template directory
+        cls.template_dir.cleanup()
+        # Call parent tearDownClass to ensure proper cleanup
+        super().tearDownClass()
+
+
 class FormWizardViewStructuralTests(FormWizardTestMixin):
     def test_load_initial_step(self):
         """
@@ -1448,16 +1535,6 @@ class FormWizardViewStructuralTests(FormWizardTestMixin):
         self.assertEqual(response.request["PATH_INFO"], self.initial_step)
 
 
-@override_settings(ROOT_URLCONF="tests.urls")
-@override_settings(
-    ROOT_URLCONF="tests.urls",
-    TEMPLATES=[
-        {
-            **settings.TEMPLATES[0],
-            "DIRS": ["tests/templates"],
-        }
-    ],
-)
 class FormWizardFlowTests(FormWizardTestMixin):
     def setUp(self):
         super().setUp()
