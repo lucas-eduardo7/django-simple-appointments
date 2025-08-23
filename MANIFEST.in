@@ -1,0 +1,10 @@
+include README.md
+
+include LICENSE
+
+recursive-include simple_appointments/migrations *.py
+
+# recursive-include simple_appointments/templates *
+# recursive-include simple_appointments/static *
+
+prune tests
