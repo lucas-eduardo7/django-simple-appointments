@@ -105,7 +105,7 @@ To contribute or test locally:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/django-simple-appointments.git
+   git clone https://github.com/lucas-eduardo7/django-simple-appointments.git
    cd django-simple-appointments
    ```
 
